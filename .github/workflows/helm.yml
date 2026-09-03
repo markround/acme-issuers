@@ -2,12 +2,15 @@ name: Publish Helm Chart
 
 on:
   push:
+    branches:
+      - '**'
     tags:
       - 'v*'
       - '[0-9]+.[0-9]+.[0-9]+'
 
 env:
   CHART_PATH: .
+  OCI_REGISTRY: "ghcr.io/${{ github.repository_owner }}/acme-issuers"
 
 jobs:
   publish-oci-helm-chart:
@@ -22,28 +25,42 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version from tag
-        id: extract_version
-        run: |
-          # Remove 'v' prefix if present
-          VERSION=${GITHUB_REF#refs/tags/}
-          VERSION=${VERSION#v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Get chart version
         id: get_chart_version
         run: |
-          CHART_VERSION=$(grep "version:" ${{ env.CHART_PATH }}/Chart.yaml | awk '{print $2}')
+          CHART_VERSION=$(grep -m1 '^version:' ${{ env.CHART_PATH }}/Chart.yaml | awk '{print $2}')
           echo "chart_version=$CHART_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Verify version consistency
+      - name: Extract version and OCI tag
+        id: extract_version
         run: |
-          if [ "${{ steps.extract_version.outputs.version }}" != "${{ steps.get_chart_version.outputs.chart_version }}" ]; then
-            echo "Error: Tag version (${{ steps.extract_version.outputs.version }}) does not match chart version (${{ steps.get_chart_version.outputs.chart_version }})"
-            exit 1
+          # On tag pushes: version/OCI tag comes from the tag (e.g. v0.3.1 -> 0.3.1)
+          # On branch pushes: the OCI tag is the branch name (slashes replaced with underscores).
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RAW=${GITHUB_REF#refs/tags/}
+            VERSION=${RAW#v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "tag=$VERSION" >> $GITHUB_OUTPUT
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "tag_name=$RAW" >> $GITHUB_OUTPUT
+          else
+            BRANCH=${GITHUB_REF#refs/heads/}
+            echo "tag=${BRANCH//\//_}" >> $GITHUB_OUTPUT
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           fi
-          echo "✅ Version consistency verified: ${{ steps.extract_version.outputs.version }}"
+
+      - name: Verify version consistency (tag releases only)
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            if [ "${{ steps.extract_version.outputs.version }}" != "${{ steps.get_chart_version.outputs.chart_version }}" ]; then
+              echo "Error: Tag version (${{ steps.extract_version.outputs.version }}) does not match chart version (${{ steps.get_chart_version.outputs.chart_version }})"
+              exit 1
+            fi
+            echo "✅ Version consistency verified: ${{ steps.extract_version.outputs.version }}"
+          else
+            echo "ℹ️ Skipping version consistency check for branch push"
+          fi
 
       - name: Install Helm
         uses: azure/setup-helm@v3
@@ -59,28 +76,33 @@ jobs:
 
       - name: Package and push OCI Helm chart
         run: |
-          # Package the chart
-          helm package ${{ env.CHART_PATH }} --destination ./oci-charts
-          
-          # Push the chart to GHCR as OCI artifact
-          CHART_FILE="acme-issuers-${{ steps.extract_version.outputs.version }}.tgz"
-          OCI_REGISTRY="ghcr.io/${{ github.repository_owner }}/helm"
-          
-          echo "Pushing OCI chart to $OCI_REGISTRY:${{ steps.extract_version.outputs.version }}"
-          
-          helm push "./oci-charts/$CHART_FILE" "oci://$OCI_REGISTRY"
-          
-          echo "OCI Helm chart pushed successfully"
+          mkdir -p ./oci-charts
 
-      - name: Output OCI publication details
+          # Package the chart (filename uses the Chart.yaml version, e.g. acme-issuers-0.3.1.tgz)
+          helm package ${{ env.CHART_PATH }} --destination ./oci-charts
+
+          CHART_VERSION="${{ steps.get_chart_version.outputs.chart_version }}"
+          TAG="${{ steps.extract_version.outputs.tag }}"
+          CHART_FILE="acme-issuers-${CHART_VERSION}.tgz"
+
+          echo "Pushing OCI chart to $OCI_REGISTRY:$TAG"
+          helm push "./oci-charts/$CHART_FILE" "oci://$OCI_REGISTRY:$TAG"
+          echo "OCI Helm chart pushed successfully (tag: $TAG)"
+
+      - name: Output publication details
         run: |
           echo "## 📦 OCI Helm Chart Published Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Chart:** acme-issuers" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.extract_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Registry:** ghcr.io/${{ github.repository_owner }}/helm" >> $GITHUB_STEP_SUMMARY
+          echo "**OCI Tag:** ${{ steps.extract_version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.get_chart_version.outputs.chart_version }}" >> $GITHUB_STEP_SUMMARY
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "**Source:** ${{ steps.extract_version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Branch:** ${{ steps.extract_version.outputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Installation Commands:" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "helm install acme-issuers oci://ghcr.io/${{ github.repository_owner }}/helm --version ${{ steps.extract_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "helm install acme-issuers oci://$OCI_REGISTRY --version ${{ steps.extract_version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
