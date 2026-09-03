@@ -1,0 +1,17 @@
+{{- range .Values.clusterIssuers }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .name }}
+spec:
+  acme:
+    email: {{ default $.Values.email .email }}
+    privateKeySecretRef:
+      name: {{ .name }}-account
+    server: {{ .url }}
+    solvers:
+    - http01:
+        ingress:
+          class: {{ $.Values.ingressClass }}
+{{- end }}

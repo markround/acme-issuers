@@ -1,0 +1,13 @@
+---
+# Ingress class to use for solvers
+ingressClass: kommander-traefik
+
+# Global email to use for every issuer listed. Can also be set per issuer.
+email: acme@example.com
+
+# List of ClusterIssuers to create
+clusterIssuers:
+  - name: letsencrypt-staging
+    url: https://acme-staging-v02.api.letsencrypt.org/directory
+  - name: letsencrypt-prod
+    url:  https://acme-v02.api.letsencrypt.org/directory
