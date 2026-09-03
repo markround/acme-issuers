@@ -30,6 +30,7 @@ jobs:
         run: |
           CHART_VERSION=$(grep -m1 '^version:' ${{ env.CHART_PATH }}/Chart.yaml | awk '{print $2}')
           echo "chart_version=$CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_ENV
 
       - name: Extract version and OCI tag
         id: extract_version
@@ -45,7 +46,9 @@ jobs:
             echo "tag_name=$RAW" >> $GITHUB_OUTPUT
           else
             BRANCH=${GITHUB_REF#refs/heads/}
-            echo "tag=${BRANCH//\//_}" >> $GITHUB_OUTPUT
+            # GHCR requires OCI artifact tags to be valid semver, so encode the
+            # branch name as a prerelease component: <chart_version>-<branch>.
+            echo "tag=${CHART_VERSION}-${BRANCH//\//_}" >> $GITHUB_OUTPUT
             echo "is_tag=false" >> $GITHUB_OUTPUT
             echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           fi
