@@ -10,7 +10,10 @@ on:
 
 env:
   CHART_PATH: .
-  OCI_REGISTRY: "ghcr.io/${{ github.repository_owner }}/acme-issuers/acme-issuers"
+  CHART_NAME: acme-issuers
+  # `helm push` takes the repository PREFIX only - it appends "/<chart-name>:<chart-version>"
+  # itself, using the metadata baked into the packaged .tgz.
+  OCI_REPO_PREFIX: "ghcr.io/${{ github.repository_owner }}/acme-issuers"
 
 jobs:
   publish-oci-helm-chart:
@@ -36,7 +39,7 @@ jobs:
         id: extract_version
         run: |
           # On tag pushes: version/OCI tag comes from the tag (e.g. v0.3.1 -> 0.3.1)
-          # On branch pushes: the OCI tag is the branch name (slashes replaced with underscores).
+          # On branch pushes: <chart_version>-<branch> as a semver prerelease.
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             RAW=${GITHUB_REF#refs/tags/}
             VERSION=${RAW#v}
@@ -46,9 +49,11 @@ jobs:
             echo "tag_name=$RAW" >> $GITHUB_OUTPUT
           else
             BRANCH=${GITHUB_REF#refs/heads/}
-            # GHCR requires OCI artifact tags to be valid semver, so encode the
-            # branch name as a prerelease component: <chart_version>-<branch>.
-            echo "tag=${CHART_VERSION}-${BRANCH//\//_}" >> $GITHUB_OUTPUT
+            # The OCI tag is set via `helm package --version`, which requires valid
+            # semver: a prerelease component may only contain [0-9A-Za-z-], so
+            # underscores/slashes/dots from the branch name must be folded to "-".
+            SAFE_BRANCH=$(printf '%s' "$BRANCH" | tr -c 'a-zA-Z0-9' '-' | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
+            echo "tag=${CHART_VERSION}-${SAFE_BRANCH}" >> $GITHUB_OUTPUT
             echo "is_tag=false" >> $GITHUB_OUTPUT
             echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           fi
@@ -81,24 +86,25 @@ jobs:
         run: |
           mkdir -p ./oci-charts
 
-          # Package the chart (filename uses the Chart.yaml version, e.g. acme-issuers-0.3.1.tgz)
-          helm package ${{ env.CHART_PATH }} --destination ./oci-charts
-
-          CHART_VERSION="${{ steps.get_chart_version.outputs.chart_version }}"
           TAG="${{ steps.extract_version.outputs.tag }}"
-          CHART_FILE="acme-issuers-${CHART_VERSION}.tgz"
 
-          echo "Pushing OCI chart to $OCI_REGISTRY:$TAG"
-          helm push "./oci-charts/$CHART_FILE" "oci://$OCI_REGISTRY:$TAG"
+          # The pushed OCI tag is the packaged chart version - `helm push` derives the
+          # reference from the .tgz metadata and will not accept a tag in its argument.
+          helm package ${{ env.CHART_PATH }} --destination ./oci-charts --version "$TAG"
+
+          CHART_FILE="${CHART_NAME}-${TAG}.tgz"
+
+          echo "Pushing OCI chart to $OCI_REPO_PREFIX/$CHART_NAME:$TAG"
+          helm push "./oci-charts/$CHART_FILE" "oci://$OCI_REPO_PREFIX"
           echo "OCI Helm chart pushed successfully (tag: $TAG)"
 
       - name: Output publication details
         run: |
           echo "## 📦 OCI Helm Chart Published Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Chart:** acme-issuers" >> $GITHUB_STEP_SUMMARY
+          echo "**Chart:** $CHART_NAME" >> $GITHUB_STEP_SUMMARY
           echo "**OCI Tag:** ${{ steps.extract_version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.get_chart_version.outputs.chart_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Chart.yaml Version:** ${{ steps.get_chart_version.outputs.chart_version }}" >> $GITHUB_STEP_SUMMARY
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             echo "**Source:** ${{ steps.extract_version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
           else
@@ -107,5 +113,5 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Installation Commands:" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "helm install acme-issuers oci://$OCI_REGISTRY --version ${{ steps.extract_version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "helm install $CHART_NAME oci://$OCI_REPO_PREFIX/$CHART_NAME --version ${{ steps.extract_version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
