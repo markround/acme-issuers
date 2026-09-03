@@ -11,7 +11,5 @@ spec:
       name: {{ .name }}-account
     server: {{ .url }}
     solvers:
-    - http01:
-        ingress:
-          class: {{ $.Values.ingressClass }}
+      {{- include "acme-issuers.solvers" (dict "issuer" . "root" $) | nindent 6 }}
 {{- end }}

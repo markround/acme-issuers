@@ -51,6 +51,31 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Render the ACME solvers for a single issuer, in cert-manager's
+`spec.acme.solvers` format. Precedence, highest first:
+
+  1. the issuer's own `solvers` list
+  2. the global `.Values.solvers` list
+  3. a built-in HTTP-01 ingress solver using `.Values.ingressClass`
+
+Usage: include "acme-issuers.solvers" (dict "issuer" . "root" $)
+*/}}
+{{- define "acme-issuers.solvers" -}}
+{{- $issuer := .issuer -}}
+{{- $root := .root -}}
+{{- $solvers := $issuer.solvers | default $root.Values.solvers -}}
+{{- if $solvers -}}
+{{- toYaml $solvers }}
+{{- else if $root.Values.ingressClass -}}
+- http01:
+    ingress:
+      class: {{ $root.Values.ingressClass }}
+{{- else -}}
+{{- fail (printf "clusterIssuer %q has no solver: set ingressClass, solvers, or a per-issuer solvers list" $issuer.name) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Create the name of the service account to use
 */}}
 {{- define "acme-issuers.serviceAccountName" -}}

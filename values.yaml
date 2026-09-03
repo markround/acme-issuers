@@ -1,13 +1,46 @@
 ---
-# Ingress class to use for solvers
+# Ingress class used by the default HTTP-01 solver. Ignored if `solvers` (below)
+# or a per-issuer `solvers` list is set.
 ingressClass: kommander-traefik
 
 # Global email to use for every issuer listed. Can also be set per issuer.
 email: acme@example.com
 
-# List of ClusterIssuers to create
+# Global ACME solvers for every issuer, in cert-manager's `spec.acme.solvers`
+# format - the list is passed through to the ClusterIssuer verbatim, so any
+# solver type, provider or selector cert-manager supports can be used here.
+#
+# Left empty, every issuer falls back to an HTTP-01 solver using `ingressClass`:
+#
+#   solvers:
+#     - http01:
+#         ingress:
+#           class: kommander-traefik
+#
+# Example DNS-01 with Cloudflare (the referenced Secret must already exist in
+# the cert-manager namespace):
+#
+#   solvers:
+#     - dns01:
+#         cloudflare:
+#           apiTokenSecretRef:
+#             name: cloudflare-api-token-secret
+#             key: api-token
+solvers: []
+
+# List of ClusterIssuers to create. Each entry accepts an optional `email` and
+# an optional `solvers` list, both overriding the global values above.
 clusterIssuers:
   - name: letsencrypt-staging
     url: https://acme-staging-v02.api.letsencrypt.org/directory
   - name: letsencrypt-prod
     url:  https://acme-v02.api.letsencrypt.org/directory
+    # Example of overriding the solver for a single issuer, e.g. to issue
+    # wildcard certificates (which HTTP-01 cannot do):
+    #
+    # solvers:
+    #   - dns01:
+    #       cloudflare:
+    #         apiTokenSecretRef:
+    #           name: cloudflare-api-token-secret
+    #           key: api-token
