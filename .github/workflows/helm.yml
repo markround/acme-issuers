@@ -10,7 +10,7 @@ on:
 
 env:
   CHART_PATH: .
-  OCI_REGISTRY: "ghcr.io/${{ github.repository_owner }}/acme-issuers"
+  OCI_REGISTRY: "ghcr.io/${{ github.repository_owner }}/acme-issuers/acme-issuers"
 
 jobs:
   publish-oci-helm-chart:
