@@ -7,7 +7,7 @@ on:
       - '[0-9]+.[0-9]+.[0-9]+'
 
 env:
-  CHART_PATH: ./
+  CHART_PATH: .
 
 jobs:
   publish-oci-helm-chart:
@@ -63,7 +63,7 @@ jobs:
           helm package ${{ env.CHART_PATH }} --destination ./oci-charts
           
           # Push the chart to GHCR as OCI artifact
-          CHART_FILE="nkp-cluster-cleaner-${{ steps.extract_version.outputs.version }}.tgz"
+          CHART_FILE="acme-issuers-${{ steps.extract_version.outputs.version }}.tgz"
           OCI_REGISTRY="ghcr.io/${{ github.repository_owner }}/helm"
           
           echo "Pushing OCI chart to $OCI_REGISTRY:${{ steps.extract_version.outputs.version }}"
@@ -76,11 +76,11 @@ jobs:
         run: |
           echo "## 📦 OCI Helm Chart Published Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Chart:** nkp-cluster-cleaner" >> $GITHUB_STEP_SUMMARY
+          echo "**Chart:** acme-issuers" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ steps.extract_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Registry:** ghcr.io/${{ github.repository_owner }}/helm" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Installation Commands:" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "helm install nkp-cluster-cleaner oci://ghcr.io/${{ github.repository_owner }}/helm --version ${{ steps.extract_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "helm install acme-issuers oci://ghcr.io/${{ github.repository_owner }}/helm --version ${{ steps.extract_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
