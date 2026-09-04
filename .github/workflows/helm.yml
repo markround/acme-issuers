@@ -13,7 +13,7 @@ env:
   CHART_NAME: acme-issuers
   # `helm push` takes the repository PREFIX only - it appends "/<chart-name>:<chart-version>"
   # itself, using the metadata baked into the packaged .tgz.
-  OCI_REPO_PREFIX: "ghcr.io/${{ github.repository_owner }}/acme-issuers"
+  OCI_REPO_PREFIX: "ghcr.io/${{ github.repository_owner }}/helm"
 
 jobs:
   publish-oci-helm-chart:
